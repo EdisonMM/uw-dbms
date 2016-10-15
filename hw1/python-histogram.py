@@ -3,6 +3,13 @@ import psycopg2
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
+import math
+
+"""
+This is a python code for problem 5.
+Histogram of number of publications, histogram of number of collaborators.
+According to the graph, both seem log y propotional to 1/x.
+"""
 
 def main():
 	try:
@@ -26,22 +33,22 @@ def main():
 		"group by num order by num;"
 	}
 	
-	plt.figure(figsize = (16,12), dpi=200)
+	plt.figure()
 
 	for i, (name, query) in enumerate(queries.items()):
-	    
 	    cur.execute(query)
 	    rows = cur.fetchall()
-	    x = [row[0] for row in rows]
-	    y = [row[1] for row in rows]
 
-	    plt.subplot(211+i)
-	    plt.plot(x, y)
-	    plt.title(name)
+	    x = [row[0] for row in rows]
+	    log_y = [math.log(row[1]) for row in rows]
+
+	    plt.subplot(211 + i)
+	    plt.plot(x, log_y)
+	    plt.title(name+' (log scale)')
 	    plt.xlabel(name.lower())
-	    plt.ylabel('number of corresponding authors')
-	    
-	fileName = 'histograms.pdf'
+	    plt.ylabel('log number of corresponding authors')
+
+	fileName = 'graph.pdf'
 	plt.savefig(fileName)
 	print "Save histogram as %s" %(fileName)
 

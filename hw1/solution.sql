@@ -1,3 +1,17 @@
+/*
+
+This is a solution file for homework 1.
+
+Each solution is commented by problem number.
+
+Asuumption:
+	Publication can have multiple authors and editors.
+	Publication cannot have multiple isbn, booktitle, publisher, month, or volume.
+	(Sometimes there occurs an error bevause DBLP is a real dataset, but it was assumed that only the first one is the right one.)
+
+*/
+
+
 -- 1
 
 create table Author(

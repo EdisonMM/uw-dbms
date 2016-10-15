@@ -1,3 +1,12 @@
+/*
+This is for problem 6 - extra credit.
+
+Erdos number is a well-known measurement which describes the 'collaborative distance' between Erdos and another person, as measured by authorship of papers.
+
+Similarly, I proposed Suciu number, which is the 'collaborative distance' between our professor Dan Suciu.
+
+*/
+
 create view CoAuthor as (select a1.id as id1, a2.id as id2
 		from Authored a1 inner join Authored a2 on a1.pubid = a2.pubid
 		where not a1.id = a2.id);
