@@ -1,6 +1,5 @@
 -- 1
 
-/*
 create table Author(
 	id	int	not null unique,
 	name	text,
@@ -41,7 +40,6 @@ create table Incollection(
 create table Inproceedings(
 	pubid	int	not null unique,
 	booktitle	text,
-	editor	text,
 	primary key (pubid),
 	foreign key (pubid) references Publication(pubid)
 );
@@ -51,6 +49,14 @@ create table Authored(
 	foreign key (id) references Author(id),
 	foreign key (pubid) references Publication(pubid)
 );
+
+create table Editored(
+	pubid	int	not null,
+	editor	text	not null,
+	foreign key (pubid) references Publication(pubid)
+);
+
+drop table Editored;
 drop table Authored;
 drop table Inproceedings;
 drop table Incollection;
@@ -58,11 +64,16 @@ drop table Book;
 drop table Article;
 drop table Publication;
 drop table Author;
+
+/*
+To run this SQL code correctly, comment drop.
+(They are for question1, part of the homework.)
 */
+
 
 -- 2
 
-/*
+
 create table tmpAuthor(
 	k text not null,
 	v text
@@ -146,9 +157,8 @@ with tmp as (select row_number() over (partition by k) as r, k, v
 		from Field where p = 'booktitle')
 insert into tmpBooktitle (select k, v from tmp where r = 1);
 insert into tmpEditor (select f.k, f.v from Field f where f.p = 'editor');
-*/
 
-/*
+
 create index PubKey on Pub(k);
 create index FieldKey on Field(k);
 create index PubP on Pub(p);
@@ -175,10 +185,8 @@ where exists (select * from Occurs o1
 		where o.field = o1.field and o1.pubtype = 'incollection')
 	and exists (select * from Occurs o1
 		where o.field = o1.field and o1.pubtype='inproceedings');
-*/
 -- 3.
 
-/*
 create sequence authorSeq;
 create sequence pubSeq;
 create table Homepage(name text not null unique, homepage text);
@@ -190,7 +198,10 @@ with tmp as (select row_number() over (partition by ta.v) as r, ta.v as name, f2
 insert into Homepage (select name, hp from tmp where r = 1);
 
 insert into Author(select nextval('authorSeq'), a.v, h.homepage
-	from tmpAuthor a left outer join Homepage h on a.v=h.name);
+	from (select distinct v from tmpAuthor) as a
+		left outer join Homepage h on a.v=h.name);
+
+select count(*) from Author where name='Dan Suciu';
 
 insert into Publication (select nextval('pubSeq'), tt.k, tt.v, ty.v
 	from tmpTitle tt left outer join tmpYear ty on tt.k = ty.k
@@ -201,6 +212,7 @@ insert into Publication (select nextval('pubSeq'), tt.k, tt.v, ty.v
 drop table Homepage;
 drop sequence authorSeq;
 drop sequence pubSeq;
+
 insert into Article(select p.pubid, tj.v, tm.v, tv.v, tn.v
 		from Publication p
 			left outer join tmpJournal tj on p.pubkey = tj.k
@@ -222,34 +234,20 @@ insert into Incollection(select p.pubid, tb.v, tp.v, ti.v
 			left outer join tmpIsbn ti on p.pubkey = ti.k
 		where exists (select * from pub pb
 			where pb.k = p.pubkey and pb.p = 'incollection'));
-*/
 
-select p.pubid, tb.v, te.v
-	from Publication p
-		left outer join tmpBooktitle tb on p.pubkey = tb.k
-		left outer join tmpEditor te on p.pubkey = te.k
-	where p.pubid='784441' and exists (select * from pub pb
-		where pb.k = p.pubkey and pb.p = 'inproceedings');
-
-
-
-insert into Inproceedings(select p.pubid, tb.v, te.v
+insert into Inproceedings(select p.pubid, tb.v
 		from Publication p
 			left outer join tmpBooktitle tb on p.pubkey = tb.k
-			left outer join tmpEditor te on p.pubkey = te.k
 		where exists (select * from pub pb
 			where pb.k = p.pubkey and pb.p = 'inproceedings'));
 
-
-/*
 insert into Authored(select a.id, p.pubid
 		from tmpAuthor ta inner join Author a on ta.v = a.name
 			inner join Publication p on ta.k = p.pubkey);
-*/
 
--- TODO : HERE
+insert into Editored(select inp.pubid, e.v
+		from Inproceedings inp inner join Publication p on inp.pubid=p.pubid inner join tmpEditor e on p.pubkey=e.k);
 
-/*
 drop table tmpAuthor;
 drop table tmpTitle;
 drop table tmpYear;
@@ -261,106 +259,111 @@ drop table tmpNumber;
 drop table tmpIsbn;
 drop table tmpBooktitle;
 drop table tmpEditor;
-*/
+
 
 -- 4.
-/*
 --q1. Find the top 20 authors with the largest number of publications. Runtime: under 10s.
 
-select a.name, count(*) as pubNum
-from Author a inner join Authored aed on a.id = aed.id
-group by a.name order by pubNum desc limit 20;
+select id, count(*) as pubNum
+from Authored
+group by id order by pubNum desc limit 20;
 
 -- q2. Find the top 20 authors with the largest number of publications in STOC. Repeat this for two more conferences, of your choice (suggestions: top 20 authors in SOSP, or CHI, or SIGMOD, or SIGGRAPH; note that you need to do some digging to find out how DBLP spells the name of your conference). Runtime: under 10s.
 
-create view PubPublisher as (
-	select pubid, publisher from Book
- 	union select pubid, publisher from Incollection);
+create view conference as (select pubid, booktitle
+		from Incollection) union (select pubid, booktitle
+		from Inproceedings);
+create view STOC as (select aed.id, count(*) as cnt
+	from conference c left outer join Authored aed on c.pubid=aed.pubid
+	where c.booktitle like '%STOC%' or c.booktitle like '%symposium of theory of computing%'
+	group by aed.id
+);
+select * from STOC order by cnt desc limit 20;
 
-create view AuthorPublisher as (
-	select au.id as id, pp.publisher as publisher
-	from Authored au inner join PubPublisher pp on au.pubid = pp.pubid);
+create view SIGMOD as (select aed.id, count(*) as cnt
+	from conference c left outer join Authored aed on c.pubid=aed.pubid
+	where c.booktitle like '%SIGMOD%' or c.booktitle like '%special interest group on management of data%'
+	group by aed.id
+);
+select * from SIGMOD order by cnt desc limit 20;
 
-with topAuthor as (select id, count(*) as num
-		from AuthorPublisher
-		where publisher	= 'STOC')
-select a.name
-from topAuthor ta inner join Author a on ta.id = a.id
-order by ta.num limit 20;
+create view PODS as (select aed.id, count(*) as cnt
+	from conference c left outer join Authored aed on c.pubid=aed.pubid
+	where c.booktitle like '%PODS%'
+	group by aed.id
+);
+select * from PODS order by cnt desc limit 20;
 
 -- q3. The two major database conferences are 'PODS' (theory) and 'SIGMOD Conference' (systems). Find (a) all authors who published at least 10 SIGMOD papers but never published a PODS paper, and (b) all authors who published at least 5 PODS papers but never published a SIGMOD paper. Runtime: under 10s.
 
-with NSIG as (select id, count(*) as ns
-		from AuthorPublisher where publisher='SIGMOD')
-     NPOD as (select id, count(*) as np
-		from AuthorPublisher where pp.publisher='PODS')
-create view AuthorDB as (select NSIG.id as id, NSIG.ns as ns, NPOD.np as np
-		from NSIG inner join NPOD on NSIG.id = NPOD.id);
-select a.name
-from Author a inner join AuthorDB adb on a.id = adb.id
-where adb.ns >= 10 and adb.np = 0;
-select a.name
-from Author a inner join AuthorDB adb on a.id = adb.id
-where adb.ns = 0 and adb.np >= 5;
+select s.id
+from SIGMOD s left outer join PODS p on s.id = p.id
+where s.cnt >= 10 and p.cnt is null;
+select p.id
+from PODS p left outer join SIGMOD s on s.id = p.id
+where p.cnt >= 5 and s.cnt is null;
 
-drop view PubPublisher;
-drop view AuthorPublisher;
-drop view AuthorDB;
+drop view SIGMOD;
+drop view PODS;
 
 -- q4. A decade is a sequence of ten consecutive years, e.g. 1982, 1983, ..., 1991. For each decade, compute the total number of publications in DBLP in that decade. Hint: for this and the next query you may want to compute a temporary table with all distinct years. Runtime: under 1minute. Note: we are looking for ANY period of ten consecutive years, not just those that start and end with 0's. 
 
+
 create table numPubYear(
-	year int not null unique, 
+	year int not null unique,
 	num int
 );
-insert into numPubYear (select convert(int, year), count(*)
+insert into numPubYear (select cast(year as int), count(*)
 			from Publication
+			where year is not null
 			group by year);
 
-select * from numPubYear;
-
-select y.year, sum(*)
+select y.year, sum(z.num)
 from numPubYear y, numPubYear z
 where z.year >= y.year and z.year < y.year+10
 group by y.year
 order by y.year;
+
 drop table numPubYear;
 
 -- q5. Find the top 20 most collaborative authors. That is, for each author determine its number of collaborators, then find the top 20. Hint: for this and some question below you may want to compute a temporary table of coauthors. Runtime: a couple of minutes.
 
 with CoAuthor as (select a1.id as id1, a2.id as id2
-		from Authored a1 inner join Authored a2 on a1.pubid = a2.pubid)
-	CollaboNum as (select id as id, count(*) as num
-		from CoAuthor
-		group by id)
-select a.name
-from CollaboNum co inner join Author a on co.id = a.id
-order by co.num limit 20;
-
+		from Authored a1 inner join Authored a2 on a1.pubid = a2.pubid
+		where not a1.id = a2.id)
+select id1 as id, count(*) as num
+from CoAuthor
+group by id1
+order by num desc limit 20;
 
 -- q6. Extra credit: For each decade, find the most prolific author in that decade. Hint: you may want to first compute a temporary table, storing for each decade and each author the number of publications of that author in that decade. Runtime: a few minutes.
 
 create table numAuYear(
-	year int not null unique,
-	id text,
+	year int not null,
+	id text not null,
 	num int
 );
-insert into numAuYear (select cast(int, p.year), au.id, count(*)
+insert into numAuYear (select cast(p.year as int), au.id, count(*)
 		from Publication p inner join Authored au on p.pubid = au.pubid
 		group by p.year, au.id);
 create table numAuDec(
-	year int not null unique,
-	id text,
+	year int not null,
+	id text not null,
 	num int
 );
-insert into numAuDec (select x.year as year, x.id as id, sum(y.num) as tot
-		from numAuDec x inner join numAuDec y on x.id = y.id
-		where y.year >= x.year and y.year<x.year+10);
-select nad.year, a.name
-from numAuDec nad inner join Author a on nad.id = a.id
-where nad.year, nad.tot in (select year, max(tot)
+insert into numAuDec (select x.year, x.id, sum(y.num)
+		from numAuYear x inner join numAuYear y on x.id = y.id
+		where y.year >= x.year and y.year<x.year+10
+		group by x.year, x.id);
+select year, id
+from numAuDec
+where (year, num) in (select year, max(num)
 			from numAuDec
 			group by year);
+
+drop table numAuYear;
+drop table numAuDec;
+
 
 -- q7. Extra credit: Find the institutions that have published most papers in STOC; return the top 20 institutions. Then repeat this query with your favorite conference (SOSP or CHI, or ...), and see which are the best places and you didn't know about. Hint: where do you get information about institutions? Use the Homepage information: convert a Homepage like http://www.cs.washington.edu/homes/levy/ to http://www.cs.washington.edu, or even to www.cs.washington.edu: now you have grouped all authors from our department, and we use this URL as surrogate for the institution. Google for substring, position and trim in postgres.
 
@@ -369,7 +372,7 @@ insert into Num values(1);
 insert into Num(values(2));
 insert into Num(values(3));
 
-create table Inst(id text, inst text);
+create table Inst(id int, inst text);
 insert into Inst(
 	with Url as (select a.id as id, split_part(a.homepage, '/', n.n) as url
 		from Author a, Num n)
@@ -379,18 +382,30 @@ insert into Inst(
 		where not url='' and not url='http:' and not url='https:') as rs
 	where r=1);
 
-with TopInst(select i.inst as inst, count(*) as num
-	from Inst i inner join AuthorPublisher ap on i.id = ap.id
-	group by i.inst)
-select inst
-from TopInst
-order by num desc limit 20;
+select i.inst, sum(s.cnt) as tot_cnt
+from Inst i inner join STOC s on i.id=s.id
+group by i.inst
+order by tot_cnt desc limit 20;
 
 drop table Num;
 drop table Inst;
-drop view AuthorPublisher;
-drop view PubPublisher;
+drop view STOC;
+drop view conference;
 
 --5
-*/
+/* this queries are also in python-histogram.py */
+
+with CoAuthor as (select a1.id as id1, a2.id as id2
+		from Authored a1 inner join Authored a2 on a1.pubid = a2.pubid
+		where not a1.id = a2.id)
+select num, count(*)
+from (select id1, count(*) as num from CoAuthor group by id1) as CollaboNum
+group by num
+order by num;
+
+select num, count(*)
+from (select id, count(*) as num from Authored group by id) as PubNum
+group by num
+order by num;
+
 
