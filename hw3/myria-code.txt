@@ -1,0 +1,33 @@
+T1 = LOAD("https://s3-us-west-2.amazonaws.com/cse544data/S0001.csv", csv(schema(id:string, seq:string), skip=0));
+T2 = LOAD("https://s3-us-west-2.amazonaws.com/cse544data/S0002.csv", csv(schema(id:string, seq:string), skip=0));
+K1 = [from T1
+		where len(seq)>=11
+		emit 'S0001' as sampleid, ngram(seq, 11) as kmer];
+KCNT1 = [from K1
+		emit sampleid, kmer, count(*) as cnt];
+K2 = [from T2
+		where len(seq)>=11
+		emit 'S0002' as sampleid, ngram(seq, 11) as kmer];
+KCNT2 = [from K2
+		emit sampleid, kmer, count(*) as cnt];
+KCNT = KCNT1 + KCNT2;
+store(KCNT, Task1, [sampleid, kmer, cnt]);
+S = [from KCNT
+	emit sampleid, sum(cnt) as s];
+NKCNT = [from KCNT, S
+		where KCNT.sampleid = S.sampleid
+		emit KCNT.sampleid, KCNT.kmer, KCNT.cnt/S.s as norm_cnt];
+store(NKCNT, Task2, [sampleid, kmer, norm_cnt]);
+NKCNT1 = [from NKCNT where sampleid='S0001'
+		emit kmer, norm_cnt];
+NKCNT2 = [from NKCNT where sampleid='S0002'
+		emit kmer, norm_cnt];
+BCD_G1 = [from NKCNT1, NKCNT2
+		where NKCNT1.kmer=NKCNT2.kmer and NKCNT1.norm_cnt < NKCNT2.norm_cnt
+		emit NKCNT1.kmer, NKCNT1.norm_cnt as val];
+BCD_G2 = [from NKCNT1, NKCNT2
+		where NKCNT1.kmer=NKCNT2.kmer and NKCNT1.norm_cnt >= NKCNT2.norm_cnt
+		emit NKCNT1.kmer, NKCNT2.norm_cnt as val];
+BCD_G = BCD_G1 + BCD_G2;
+BCD = [from BCD_G emit 1-sum(BCD_G.val)];
+store(BCD, Task3);
